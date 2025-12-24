@@ -1,10 +1,11 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart'; //for date formatting
+import 'package:day2/env/env.dart';
 
 class WeatherApi {
   // final String apiKey = String.fromEnvironment('API_KEY');
-  final String apiKey = 'API_KEY_HERE';
+  final String apiKey = Env.apiKey; //API key from openweathermap
 
   //Future returns Map(strings and dynamic values(int, string, etc) after some time)
   Future<Map<String, dynamic>> fetchWeatherData() async {
@@ -32,6 +33,7 @@ class WeatherApi {
       'windSpeed': listData['wind']['speed'],
       'pressure': listData['main']['pressure'],
       'humidity': listData['main']['humidity'],
+      'icon': listData['weather'][0]['icon'],
       'time': DateFormat('EEEE, d MMMM').format(
         dateTime,
       ), //time formatting by  intl : Day(Tuesday), Date(23) Month(June)"
