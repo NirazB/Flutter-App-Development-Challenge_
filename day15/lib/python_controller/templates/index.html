@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Share Hub</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-primary: #ffffff;
+            --text-secondary: #b3b3b3;
+            --accent-color: #bb86fc;
+            --secondary-accent: #03dac6;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        header {
+            width: 100%;
+            padding: 2rem 0;
+            text-align: center;
+            background-color: var(--card-bg);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            margin: 0;
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 800px;
+            margin-top: 2rem;
+            display: grid;
+            gap: 2rem;
+        }
+
+        .server-info {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .upload-section {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            border: 2px dashed var(--text-secondary);
+            transition: border-color 0.3s;
+            cursor: pointer;
+        }
+
+        .upload-section:hover {
+            border-color: var(--accent-color);
+        }
+
+        .file-list {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .file-list h2 {
+            margin-top: 0;
+            border-bottom: 1px solid var(--text-secondary);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.8rem;
+            border-bottom: 1px solid #333;
+            transition: background-color 0.2s;
+        }
+
+        li:last-child {
+            border-bottom: none;
+        }
+
+        li:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        a {
+            color: var(--secondary-accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .file-icon {
+            margin-right: 10px;
+            color: var(--text-secondary);
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .file-item {
+            animation: fadeIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>File Share Hub</h1>
+        <div style="margin-top: 10px;">
+            <a href="/video" style="color: var(--accent-color); text-decoration: none; font-weight: bold; font-size: 1rem; border: 1px solid var(--accent-color); padding: 5px 15px; border-radius: 20px; transition: all 0.3s;">
+                Go to Video Streaming
+            </a>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="server-info">
+            Server running at: <span style="color: var(--accent-color); font-weight: bold;">http://{{ ip_address }}:5000</span>
+        </div>
+
+        <div class="upload-section" id="drop-zone" onclick="document.getElementById('file-input').click()">
+            <p>Drag & Drop files here or Click to Upload</p>
+            <input type="file" id="file-input" style="display: none;" onchange="uploadFile(this.files[0])">
+        </div>
+
+        <div class="file-list">
+            <h2>Shared Files</h2>
+            <ul id="file-list-ul">
+                <!-- Files will be populated here -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // Load initial files
+        fetch('/files')
+            .then(response => response.json())
+            .then(files => {
+                const list = document.getElementById('file-list-ul');
+                list.innerHTML = '';
+                files.forEach(addFileToList);
+            });
+
+        // Socket IO events
+        socket.on('file_added', (data) => {
+            console.log('File added:', data.filename);
+            // Check if file already in list to avoid duplicates (though simple append is fine for now)
+            // A reload or just prepend is better
+            const exists = Array.from(document.querySelectorAll('li span')).some(span => span.textContent === data.filename);
+            if (!exists) {
+                addFileToList(data.filename);
+            }
+        });
+
+        function addFileToList(filename) {
+            const list = document.getElementById('file-list-ul');
+            const li = document.createElement('li');
+            li.className = 'file-item';
+            li.innerHTML = `
+                <div>
+                    <span class="file-icon">📄</span>
+                    <span>${filename}</span>
+                </div>
+                <a href="/download/${encodeURIComponent(filename)}" download>Download</a>
+            `;
+            list.prepend(li);
+        }
+
+        function uploadFile(file) {
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                if(data.error) {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Upload failed');
+            });
+        }
+
+        // Drag and Drop
+        const dropZone = document.getElementById('drop-zone');
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = 'var(--secondary-accent)';
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = 'var(--text-secondary)';
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = 'var(--text-secondary)';
+            if (e.dataTransfer.files.length > 0) {
+                uploadFile(e.dataTransfer.files[0]);
+            }
+        });
+    </script>
+</body>
+</html>
