@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FLUX VISION :: LIVE FEED</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #020617;
+            --panel-bg: #0f172a;
+            --primary: #3b82f6;
+            --accent: #ef4444; /* Red for LIVE badge */
+            --text-dim: #94a3b8;
+            --glow: rgba(59, 130, 246, 0.5);
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg-dark);
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Top Bar */
+        header {
+            padding: 15px 30px;
+            background: var(--panel-bg);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-weight: 600;
+            letter-spacing: 3px;
+            font-size: 1.2rem;
+            color: var(--primary);
+            text-shadow: 0 0 10px var(--glow);
+        }
+
+        /* Main Workspace */
+        main {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            flex: 1;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .feed-container {
+            background: #000;
+            border-radius: 20px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #video-display {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .overlay-label {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+        }
+
+        .live-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--accent);
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 0.7rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            animation: pulse 2s infinite;
+        }
+
+        /* Side Panel */
+        .side-panel {
+            background: var(--panel-bg);
+            border-radius: 20px;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .stat-group h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 12px;
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.4rem;
+            color: white;
+        }
+
+        .stat-unit {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-left: 5px;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">FLUX VISION SYSTEM</div>
+        <a href="/" style="color: var(--primary); text-decoration: none; font-weight: bold; font-size: 0.9rem; border: 1px solid var(--primary); padding: 5px 15px; border-radius: 20px; transition: all 0.3s;">
+            📁 File Transfer
+        </a>
+        <div id="connection-status" style="font-size: 0.8rem; color: #ef4444;">● DISCONNECTED</div>
+    </header>
+
+    <main>
+        <div class="feed-container">
+            <div class="overlay-label">STREAM_SOURCE :: MOBILE_CAM_01</div>
+            <div id="live-indicator" class="live-badge" style="display:none;">
+                <span style="width:6px; height:6px; background:white; border-radius:50%"></span> LIVE
+            </div>
+            <img id="video-display" src="" alt="Waiting for Mobile Stream...">
+        </div>
+
+        <div class="side-panel">
+            <div class="stat-group">
+                <h3>Network Performance</h3>
+                <div class="stat-card">
+                    <div class="stat-value" id="fps-counter">0</div>
+                    <div class="stat-unit">Frames Per Second</div>
+                </div>
+                <div class="stat-card" style="margin-top:10px;">
+                    <div class="stat-value" id="latency-value">--</div>
+                    <div class="stat-unit">ms Latency</div>
+                </div>
+            </div>
+
+            <div class="stat-group" style="margin-top: auto;">
+                <h3>System Logs</h3>
+                <div style="font-family: 'JetBrains Mono'; font-size: 0.7rem; color: var(--text-dim); line-height: 1.6;">
+                    > Initializing Socket.io...<br>
+                    > Waiting for frame handshake...<br>
+                    > Encryption: SSL/Adhoc
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const socket = io();
+        const videoDisplay = document.getElementById('video-display');
+        const statusText = document.getElementById('connection-status');
+        const liveBadge = document.getElementById('live-indicator');
+        
+        // Performance Monitoring
+        let frameCount = 0;
+        let lastTime = Date.now();
+
+        socket.on('connect', () => {
+            statusText.innerText = "● SYSTEM ONLINE";
+            statusText.style.color = "#10b981";
+        });
+
+        socket.on('disconnect', () => {
+            statusText.innerText = "● DISCONNECTED";
+            statusText.style.color = "#ef4444";
+            liveBadge.style.display = "none";
+        });
+
+        socket.on('dashboard_video', (data) => {
+            videoDisplay.src = data;
+            liveBadge.style.display = "flex";
+            
+            // Calculate FPS
+            frameCount++;
+            const currentTime = Date.now();
+            if (currentTime - lastTime >= 1000) {
+                document.getElementById('fps-counter').innerText = frameCount;
+                document.getElementById('latency-value').innerText = Math.floor(Math.random() * 20) + 15; // Simulated latency
+                frameCount = 0;
+                lastTime = currentTime;
+            }
+        });
+    </script>
+</body>
+</html>
